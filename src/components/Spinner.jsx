@@ -1,12 +1,10 @@
-import React from 'react';
-import loading from './loading.gif';
-
 const Spinner = () => {
-    return (
-        <div className="text-center">
-            <img className='my-3' src={loading} alt="loading" />
-        </div>
-    )
-}
+  return (
+    <div className="d-flex justify-content-center align-items-center py-4" role="status" aria-label="Loading">
+      <div className="spinner-border nm-spinner" aria-hidden="true"></div>
+      <span className="visually-hidden">Loading...</span>
+    </div>
+  );
+};
 
 export default Spinner;
