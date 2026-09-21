@@ -1,0 +1,4 @@
+/* App-level overrides. Most styling lives in index.css. */
+.nm-page {
+  display: block;
+}
