@@ -70,10 +70,6 @@ const News = ({ country = 'us', category = 'general', query = null, setProgress 
   }, [totalResults]);
 
   const fetchPage = useCallback(async (pageNum) => {
-    const apiKey = import.meta.env.VITE_GNEWS_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing VITE_GNEWS_API_KEY. Add it to .env locally and in Vercel environment variables.");
-    }
     const cacheKey = isSearch
       ? `gnews-q-${term.toLowerCase()}-${country}-${PAGE_SIZE}-p${pageNum}`
       : `gnews-${category}-${country}-${PAGE_SIZE}-p${pageNum}`;
@@ -84,11 +80,37 @@ const News = ({ country = 'us', category = 'general', query = null, setProgress 
         if (Date.now() - parsed.time < CACHE_TTL) return parsed;
       } catch { /* ignore bad cache */ }
     }
-    const url = isSearch
-      ? `https://gnews.io/api/v4/search?q=${encodeURIComponent(term)}&lang=en&country=${country}&max=${PAGE_SIZE}&page=${pageNum}&apikey=${apiKey}`
-      : `https://gnews.io/api/v4/top-headlines?category=${category}&country=${country}&lang=en&max=${PAGE_SIZE}&page=${pageNum}&apikey=${apiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(getHttpError(res.status, res.statusText));
+    const params = new URLSearchParams({
+      endpoint: isSearch ? "search" : "top-headlines",
+      category,
+      q: term,
+      country,
+      lang: "en",
+      max: String(PAGE_SIZE),
+      page: String(pageNum),
+    });
+    // Same-origin proxy (Vercel function): avoids GNews CORS blocks and keeps the key secret
+    let res = await fetch(`/api/news?${params.toString()}`);
+    if (res.status === 404 && import.meta.env.DEV) {
+      // `npm run dev` serves no serverless functions — call GNews directly
+      // (localhost origin is allowed). Production always uses /api/news.
+      const devKey = import.meta.env.VITE_GNEWS_API_KEY;
+      if (!devKey) {
+        throw new Error("Local API route missing. Add VITE_GNEWS_API_KEY to .env for `npm run dev`, or run with `vercel dev`.");
+      }
+      const direct = isSearch
+        ? `https://gnews.io/api/v4/search?q=${encodeURIComponent(term)}&lang=en&country=${country}&max=${PAGE_SIZE}&page=${pageNum}&apikey=${devKey}`
+        : `https://gnews.io/api/v4/top-headlines?category=${category}&country=${country}&lang=en&max=${PAGE_SIZE}&page=${pageNum}&apikey=${devKey}`;
+      res = await fetch(direct);
+    }
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const errBody = await res.json();
+        detail = errBody.error || (Array.isArray(errBody.errors) ? errBody.errors.join(", ") : "");
+      } catch { /* non-JSON error body */ }
+      throw new Error(detail || getHttpError(res.status, res.statusText));
+    }
     const data = await res.json();
     if (data.errors) throw new Error(data.errors.join(", "));
     const payload = { articles: data.articles || [], totalArticles: data.totalArticles || 0, time: Date.now() };
